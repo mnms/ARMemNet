@@ -15,12 +15,14 @@ if __name__ == "__main__":
     batch_size = int(sys.argv[2])
     num_epochs = int(sys.argv[3])
     model_dir = sys.argv[4]
+
+    # For tuning
     if len(sys.argv) > 5:
-        core_num = sys.argv[5]
+        core_num = int(sys.argv[5])
     else:
         core_num = 4
     if len(sys.argv) > 6:
-        thread_num = sys.argv[6]
+        thread_num = int(sys.argv[6])
     else:
         thread_num = 10
 
@@ -30,6 +32,8 @@ if __name__ == "__main__":
 
     # init or get SparkContext
     sc = init_nncontext()
+    
+    # tuning
     set_core_number(core_num)
 
     # create train data
