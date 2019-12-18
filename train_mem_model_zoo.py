@@ -4,6 +4,8 @@ from bigdl.optim.optimizer import *
 from data_utils import load_agg_selected_data_mem_train
 from AR_mem.config import Config
 from AR_mem.model import Model
+import tensorflow as tf
+from zoo.common import set_core_number
 
 
 if __name__ == "__main__":
@@ -31,17 +33,12 @@ if __name__ == "__main__":
                                    test_len=config.test_len,
                                    seed=config.seed)
 
-    print("train_x shape: ", train_x.shape)
-    print("train_m shape: ", train_m.shape)
-    print("train_y shape: ", train_y.shape)
-
-
-    # model_dir = config.model_dir
-
     dataset = TFDataset.from_ndarrays([train_x, train_m, train_y], batch_size=batch_size, val_tensors=[dev_x, dev_m, dev_y],)
 
     model = Model(config, dataset.tensors[0], dataset.tensors[1], dataset.tensors[2])
-    optimizer = TFOptimizer.from_loss(model.loss, Adam(config.lr), metrics={"rse": model.rse, "smape": model.smape, "mae": model.mae}, model_dir=model_dir)
+    optimizer = TFOptimizer.from_loss(model.loss, Adam(config.lr),
+                                      metrics={"rse": model.rse, "smape": model.smape, "mae": model.mae},
+                                      model_dir=model_dir)
 
     optimizer.optimize(end_trigger=MaxEpoch(num_epochs))
 
