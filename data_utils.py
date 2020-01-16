@@ -3,6 +3,10 @@ import pandas as pd
 import numpy as np
 import logging
 import pickle
+import os
+import math
+import tqdm
+
 
 logger = logging.getLogger()
 
@@ -467,6 +471,223 @@ def load_agg_data_all(data_path='../data/aggregated_data_5min_scaled.csv', ncell
     print("-----------------------------")
 
     return full_x
+
+
+# get dataset from given preprocessed_dir
+def get_datasets_from_dir(preprocessed_dir, batch_size, train_cells=1.0, valid_cells=0, test_cells=0):
+    # logger
+    logger = logging.getLogger()
+
+    # load preprocessed files from dir & get total rows
+    preprocessed_files = os.listdir(preprocessed_dir)
+    n_preprocessed_files = len(preprocessed_files)
+
+    # split train / valid / test set
+    if train_cells <= 1.0:
+        n_train_set = round(n_preprocessed_files * train_cells)
+    else:
+        n_train_set = int(train_cells)
+
+    if valid_cells <= 1.0:
+        n_valid_set = round(n_preprocessed_files * valid_cells)
+    else:
+        n_valid_set = int(valid_cells)
+
+    if test_cells <= 1.0:
+        n_test_set = round(n_preprocessed_files * test_cells)
+    else:
+        n_test_set = int(test_cells)
+
+    # split by index
+    idx_cells = np.random.permutation(n_preprocessed_files)
+    idx_train = idx_cells[:n_train_set]
+    idx_valid = idx_cells[n_train_set:n_train_set + n_valid_set]
+    idx_test = idx_cells[n_train_set + n_valid_set:n_train_set + n_valid_set + n_test_set]
+
+    train_files = [preprocessed_files[j] for j in idx_train]
+    valid_files = [preprocessed_files[j] for j in idx_valid]
+    test_files = [preprocessed_files[j] for j in idx_test]
+
+    assert n_train_set + n_valid_set + n_test_set <= n_preprocessed_files
+
+    # get valid sets & test sets
+    valid_X, valid_Y, valid_M = read_npz_files(preprocessed_dir, valid_files)
+    test_X, test_Y, test_M = read_npz_files(preprocessed_dir, test_files)
+
+    # define train_set properties
+    n_rows_per_file = np.load(os.path.join(preprocessed_dir, train_files[0]))['X'].shape[0]
+    n_total_rows = n_train_set * n_rows_per_file
+
+    # log dataset info
+    logger.info('')
+    logger.info('Dataset Summary')
+    logger.info(' - Used {:6d} cells of {:6d} total cells ({:2.2f}%)'.format(n_train_set + n_valid_set + n_test_set,
+                                                                             n_preprocessed_files, (
+                                                                                         n_train_set + n_valid_set + n_test_set) / n_preprocessed_files * 100))
+    logger.info(' - Train Dataset: {:6d} cells ({:02.2f}% of used cells)'.format(n_train_set, n_train_set / (
+                n_train_set + n_valid_set + n_test_set) * 100))
+    logger.info(' - Valid Dataset: {:6d} cells ({:02.2f}% of used cells)'.format(n_valid_set, n_valid_set / (
+                n_train_set + n_valid_set + n_test_set) * 100))
+    logger.info(' - Test Dataset : {:6d} cells ({:02.2f}% of used cells)'.format(n_test_set, n_test_set / (
+                n_train_set + n_valid_set + n_test_set) * 100))
+    logger.info('')
+    logger.info('Trainset Summary')
+    logger.info(' - Row / Cell: {:9d} rows / cell'.format(n_rows_per_file))
+    logger.info(' - Train Cell: {:9d} cells'.format(n_train_set))
+    logger.info(' - Total Rows: {:9d} rows'.format(n_total_rows))
+    logger.info(' - Batch Size: {:9d} rows / batch'.format(batch_size))
+    logger.info(' - Batch Step: {:9d} batches / epoch'.format(math.ceil(n_total_rows / batch_size)))
+    logger.info('')
+
+    # iter trainset
+    # for i in tqdm(range(0, n_total_rows, batch_size)):
+    for i in tqdm(range(0, n_total_rows, n_total_rows)):
+        row_idx_s = i  # start row's index for batch
+        # row_idx_e = i + batch_size  # end row's index for batch
+        row_idx_e = i + n_total_rows
+
+        # for last iter
+        if row_idx_e >= n_total_rows:
+            row_idx_e = n_total_rows
+
+        file_read_idx_s = math.floor(
+            row_idx_s / n_rows_per_file)  # file index which contains start row index (aka start file)
+        file_read_idx_e = math.ceil(
+            row_idx_e / n_rows_per_file)  # file index which contains end row index (aka end file)
+
+        rows_read_idx_s = row_idx_s % n_rows_per_file  # start row index on start file
+        rows_read_idx_e = row_idx_e % n_rows_per_file  # end row index on end file
+
+        train_X, train_Y, train_M = None, None, None
+
+        # read files for batch
+        for j in range(file_read_idx_s, file_read_idx_e):
+            read_npz = np.load(os.path.join(preprocessed_dir, train_files[j]))
+
+            if j == file_read_idx_s:
+                train_X = read_npz['X'][rows_read_idx_s:]
+                train_Y = read_npz['Y'][rows_read_idx_s:]
+                train_M = read_npz['M'][rows_read_idx_s:]
+            elif j == file_read_idx_e - 1:
+                train_X = np.vstack((train_X, read_npz['X'][:rows_read_idx_e]))
+                train_Y = np.vstack((train_Y, read_npz['Y'][:rows_read_idx_e]))
+                train_M = np.vstack((train_M, read_npz['M'][:rows_read_idx_e]))
+            else:
+                train_X = np.vstack((train_X, read_npz['X']))
+                train_Y = np.vstack((train_Y, read_npz['Y']))
+                train_M = np.vstack((train_M, read_npz['M']))
+
+        train_X, train_Y, train_M = train_X.reshape(-1, 10, 8), train_Y.reshape(-1, 8), train_M.reshape(-1, 77, 8)
+
+        # # log
+        # logger.info('X : {}, {}, {}'.format(train_X.shape, valid_X.shape, test_X.shape))
+        # logger.info('Y : {}, {}, {}'.format(train_Y.shape, valid_Y.shape, test_Y.shape))
+        # logger.info('M : {}, {}, {}'.format(train_M.shape, valid_M.shape, test_M.shape))
+        # logger.info('Feed data : X{}, Y{}, M{}'.format(train_X.shape, train_Y.shape, train_M.shape))
+
+        # return current batch
+        yield train_X, train_Y, train_M, valid_X, valid_Y, valid_M, test_X, test_Y, test_M
+
+# get dataset from given filenames
+def read_npz_files(preprocessed_dir, files_to_read):
+    X, Y, M = None, None, None
+
+    for filename in files_to_read:
+        read_npz = np.load(os.path.join(preprocessed_dir, filename))
+
+        if X is None:
+            X, Y, M = read_npz['X'], read_npz['Y'], read_npz['M']
+        else:
+            X = np.vstack((X, read_npz['X']))
+            Y = np.vstack((Y, read_npz['Y']))
+            M = np.vstack((M, read_npz['M']))
+
+    return X.reshape(-1, 10, 8), Y.reshape(-1, 8), M.reshape(-1, 77, 8)
+
+# get dataset from given filename
+def read_npz_file(preprocessed_dir, filename):
+    read_npz = np.load(os.path.join(preprocessed_dir, filename))
+    return read_npz['X'].reshape(-1, 10, 8), read_npz['Y'].reshape(-1, 8), read_npz['M'].reshape(-1, 77, 8)
+
+# get feature label list for training
+def get_feature_label_list(data_seq):
+    X, Y, M = data_seq
+    length = X.shape[0]
+    return [([X[i], M[i]], Y[i]) for i in range(length)]
+
+# get dataset from given preprocessed_dir parallelly by spark
+def get_datasets_from_dir_spark(sc, preprocessed_dir, batch_size, train_cells=1.0, valid_cells=0, test_cells=0):
+    # logger
+    logger = logging.getLogger()
+
+    # load preprocessed files from dir & get total rows
+    preprocessed_files = os.listdir(preprocessed_dir)
+    n_preprocessed_files = len(preprocessed_files)
+
+    # split train / valid / test set
+    if train_cells <= 1.0:
+        n_train_set = round(n_preprocessed_files * train_cells)
+    else:
+        n_train_set = int(train_cells)
+
+    if valid_cells <= 1.0:
+        n_valid_set = round(n_preprocessed_files * valid_cells)
+    else:
+        n_valid_set = int(valid_cells)
+
+    if test_cells <= 1.0:
+        n_test_set = round(n_preprocessed_files * test_cells)
+    else:
+        n_test_set = int(test_cells)
+
+    # split by index
+    idx_cells = np.random.permutation(n_preprocessed_files)
+    idx_train = idx_cells[:n_train_set]
+    idx_valid = idx_cells[n_train_set:n_train_set + n_valid_set]
+    idx_test = idx_cells[n_train_set + n_valid_set:n_train_set + n_valid_set + n_test_set]
+
+    train_files = [preprocessed_files[j] for j in idx_train]
+    valid_files = [preprocessed_files[j] for j in idx_valid]
+    test_files = [preprocessed_files[j] for j in idx_test]
+
+    assert n_train_set + n_valid_set + n_test_set <= n_preprocessed_files
+
+    # define train_set properties
+    n_rows_per_file = np.load(os.path.join(preprocessed_dir, train_files[0]))['X'].shape[0]
+    n_total_rows = n_train_set * n_rows_per_file
+
+    # log dataset info
+    logger.info('')
+    logger.info('Dataset Summary')
+    logger.info(' - Used {:6d} cells of {:6d} total cells ({:2.2f}%)'.format(n_train_set + n_valid_set + n_test_set,
+                                                                             n_preprocessed_files, (
+                                                                                         n_train_set + n_valid_set + n_test_set) / n_preprocessed_files * 100))
+    logger.info(' - Train Dataset: {:6d} cells ({:02.2f}% of used cells)'.format(n_train_set, n_train_set / (
+                n_train_set + n_valid_set + n_test_set) * 100))
+    logger.info(' - Valid Dataset: {:6d} cells ({:02.2f}% of used cells)'.format(n_valid_set, n_valid_set / (
+                n_train_set + n_valid_set + n_test_set) * 100))
+    logger.info(' - Test Dataset : {:6d} cells ({:02.2f}% of used cells)'.format(n_test_set, n_test_set / (
+                n_train_set + n_valid_set + n_test_set) * 100))
+    logger.info('')
+    logger.info('Trainset Summary')
+    logger.info(' - Row / Cell: {:9d} rows / cell'.format(n_rows_per_file))
+    logger.info(' - Train Cell: {:9d} cells'.format(n_train_set))
+    logger.info(' - Total Rows: {:9d} rows'.format(n_total_rows))
+    logger.info(' - Batch Size: {:9d} rows / batch'.format(batch_size))
+    logger.info(' - Batch Step: {:9d} batches / epoch'.format(math.ceil(n_total_rows / batch_size)))
+    logger.info('')
+
+    train_data = sc.parallelize(train_files).\
+        map(lambda file: read_npz_file(preprocessed_dir, file)).\
+        flatMap(lambda data_seq: get_feature_label_list(data_seq))
+    val_data = sc.parallelize(valid_files). \
+        map(lambda file: read_npz_file(preprocessed_dir, file)).\
+        flatMap(lambda data_seq: get_feature_label_list(data_seq))
+    test_data = sc.parallelize(test_files). \
+        map(lambda file: read_npz_file(preprocessed_dir, file)).\
+        flatMap(lambda data_seq: get_feature_label_list(data_seq))
+
+    return train_data, val_data, test_data
 
 
 if __name__ == "__main__":
