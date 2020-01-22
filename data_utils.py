@@ -7,7 +7,6 @@ import os
 import math
 import tqdm
 
-
 logger = logging.getLogger()
 
 
@@ -29,7 +28,6 @@ def load_agg_data(
         test_len=7,
         seed=None,
 ):
-
     data = pd.read_csv(data_path, index_col=0)
     data.index = pd.to_datetime(data.index)
 
@@ -42,9 +40,9 @@ def load_agg_data(
     full_y_ = []
     full_dt_ = []
 
-    for cell_id in range(ncells): # config
+    for cell_id in range(ncells):  # config
 
-        cell_data = data[data['CELL_NUM']==cell_id]
+        cell_data = data[data['CELL_NUM'] == cell_id]
 
         grouped = cell_data.groupby(pd.Grouper(freq='D'))
 
@@ -61,14 +59,15 @@ def load_agg_data(
                 source_x = group[col_list].sort_index().values.reshape(-1, ndim_x).astype('float32')
                 source_y = group[col_list].sort_index().values.reshape(-1, ndim_y).astype('float32')
 
-                slided_x = np.array([source_x[i:i + x_len] for i in range(0, len(source_x) - x_len - foresight - y_len + 1)])
+                slided_x = np.array(
+                    [source_x[i:i + x_len] for i in range(0, len(source_x) - x_len - foresight - y_len + 1)])
                 y_start_idx = x_len + foresight
                 slided_y = np.array([source_y[i:i + y_len] for i in range(y_start_idx, len(source_y) - y_len + 1)])
                 slided_dt = np.array([group_index[i:i + y_len] for i in range(y_start_idx, len(source_y) - y_len + 1)])
 
-                cell_x = np.concatenate([cell_x, slided_x],axis=0)
-                cell_y = np.concatenate([cell_y, slided_y],axis=0)
-                cell_dt = np.concatenate([cell_dt, slided_dt],axis=0)
+                cell_x = np.concatenate([cell_x, slided_x], axis=0)
+                cell_y = np.concatenate([cell_y, slided_y], axis=0)
+                cell_dt = np.concatenate([cell_dt, slided_dt], axis=0)
 
         full_x_.append(cell_x)
         full_y_.append(cell_y)
@@ -99,10 +98,10 @@ def load_agg_data(
         if y_len == 1:
             d = full_dt_tmp[i]
         else:
-            d = full_dt[i,0]
+            d = full_dt[i, 0]
 
         if d == str(start_dt):
-            test_ind = i+1
+            test_ind = i + 1
             break
 
     assert test_ind != -1
@@ -110,7 +109,7 @@ def load_agg_data(
     tr_x = full_x[:test_ind]
     tr_y = full_y[:test_ind]
 
-    if seed :
+    if seed:
         np.random.seed(seed)
     dev_len = int(len(tr_x) * dev_ratio)
     dev_ind = np.random.permutation(len(tr_x))[:dev_len]
@@ -139,7 +138,6 @@ def load_agg_selected_data_mem_train(
         test_len=7,
         seed=None,
 ):
-
     data = pd.read_csv(data_path, index_col=0)
     data.index = pd.to_datetime(data.index)
 
@@ -148,14 +146,14 @@ def load_agg_selected_data_mem_train(
     ndim_x = len(col_list)
     ndim_y = ndim_x
 
-    full_m_lst=[]
+    full_m_lst = []
     full_y_lst = []
     full_x_lst = []
     full_cell_lst = []
     cell_list = cell_ids
 
-    for cell_id in cell_list: # config
-        cell_data = data[data['CELL_NUM']==cell_id]
+    for cell_id in cell_list:  # config
+        cell_data = data[data['CELL_NUM'] == cell_id]
         grouped = cell_data.groupby(pd.Grouper(freq='D'))
 
         m_lst = []
@@ -169,9 +167,10 @@ def load_agg_selected_data_mem_train(
                 source_x = group[col_list].sort_index().values.reshape(-1, ndim_x).astype('float32')
                 source_y = group[col_list].sort_index().values.reshape(-1, ndim_y).astype('float32')
 
-                slided_x = np.array([source_x[i:i + x_len] for i in range(0, len(source_x) - x_len - foresight - y_len + 1)])
+                slided_x = np.array(
+                    [source_x[i:i + x_len] for i in range(0, len(source_x) - x_len - foresight - y_len + 1)])
                 y_start_idx = x_len + foresight
-                slided_y = np.array([source_y[i:i + y_len] for i in range(y_start_idx, len(source_y) - y_len+1)])
+                slided_y = np.array([source_y[i:i + y_len] for i in range(y_start_idx, len(source_y) - y_len + 1)])
                 slided_dt = np.array([group_index[i:i + y_len] for i in range(y_start_idx, len(source_y) - y_len + 1)])
 
                 m_lst.append(slided_x)
@@ -193,22 +192,22 @@ def load_agg_selected_data_mem_train(
 
     # [slided, ncells, day, nsteps, nfeatures]
     print("after day window sliding")
-    full_m = np.stack(full_m_lst, axis=1) # [slided, ncells, day, nsteps+1, nfeatures]
-    full_x = np.stack(full_x_lst, axis=1) # [slided, ncells, day, nsteps, nfeatures]
-    full_y = np.stack(full_y_lst, axis=1) # [slided, ncells, day, 1, nfeatures]
+    full_m = np.stack(full_m_lst, axis=1)  # [slided, ncells, day, nsteps+1, nfeatures]
+    full_x = np.stack(full_x_lst, axis=1)  # [slided, ncells, day, nsteps, nfeatures]
+    full_y = np.stack(full_y_lst, axis=1)  # [slided, ncells, day, 1, nfeatures]
     full_cell = np.stack(full_cell_lst, axis=1)  # [slided, ncells, day, 1]
 
     for arg in [full_m, full_x, full_y, full_cell]:
         print(arg.shape)
 
     # memory sliding for each cell
-    x_start_day = mem_len+1
+    x_start_day = mem_len + 1
     total_m = []
     total_x = []
     total_y = []
     total_cell = []
     for i in range(x_start_day, full_m.shape[2]):
-        total_m.append(full_m[:,:,i-mem_len:i,:,:])
+        total_m.append(full_m[:, :, i - mem_len:i, :, :])
         total_x.append(full_x[:, :, i, :, :])
         total_y.append(full_y[:, :, i, :, :])
         total_cell.append(full_cell[:, :, i, :])
@@ -228,7 +227,7 @@ def load_agg_selected_data_mem_train(
     # squeezing
     total_y = np.squeeze(total_y)
     # total_y = np.expand_dims(total_y, axis=1)     ## warning : only when using 1 cell !!
-    total_cell= np.squeeze(total_cell)
+    total_cell = np.squeeze(total_cell)
     print("after memory sliding")
     for arg in [total_x, total_y, total_cell, total_m]:
         print(arg.shape)
@@ -237,7 +236,7 @@ def load_agg_selected_data_mem_train(
         '''making shape [slided * ncells, nsteps, nfeatures]'''
         shapes = arg.shape
         right = [shapes[i] for i in range(2, len(shapes))]
-        out = np.reshape(arg, [-1]+right)
+        out = np.reshape(arg, [-1] + right)
         return out
 
     tr_x = _time_concat(total_x)
@@ -245,7 +244,7 @@ def load_agg_selected_data_mem_train(
     tr_c = _time_concat(total_cell)
     tr_m = _time_concat(total_m)
 
-    if seed :
+    if seed:
         np.random.seed(seed)
 
     dev_len = int(len(tr_x) * dev_ratio)
@@ -279,7 +278,6 @@ def load_agg_selected_data_mem(
         test_len=7,
         seed=None,
 ):
-
     data = pd.read_csv(data_path, index_col=0)
     data.index = pd.to_datetime(data.index)
 
@@ -288,15 +286,15 @@ def load_agg_selected_data_mem(
     ndim_x = len(col_list)
     ndim_y = ndim_x
 
-    full_m_lst=[]
+    full_m_lst = []
     full_y_lst = []
     full_dt_lst = []
     full_x_lst = []
     full_cell_lst = []
     cell_list = [18]
-    for cell_id in cell_list: # config
+    for cell_id in cell_list:  # config
 
-        cell_data = data[data['CELL_NUM']==cell_id]
+        cell_data = data[data['CELL_NUM'] == cell_id]
         grouped = cell_data.groupby(pd.Grouper(freq='D'))
 
         m_lst = []
@@ -310,9 +308,10 @@ def load_agg_selected_data_mem(
                 source_x = group[col_list].sort_index().values.reshape(-1, ndim_x).astype('float32')
                 source_y = group[col_list].sort_index().values.reshape(-1, ndim_y).astype('float32')
 
-                slided_x = np.array([source_x[i:i + x_len] for i in range(0, len(source_x) - x_len - foresight - y_len + 1)])
+                slided_x = np.array(
+                    [source_x[i:i + x_len] for i in range(0, len(source_x) - x_len - foresight - y_len + 1)])
                 y_start_idx = x_len + foresight
-                slided_y = np.array([source_y[i:i + y_len] for i in range(y_start_idx, len(source_y) - y_len+1)])
+                slided_y = np.array([source_y[i:i + y_len] for i in range(y_start_idx, len(source_y) - y_len + 1)])
                 slided_dt = np.array([group_index[i:i + y_len] for i in range(y_start_idx, len(source_y) - y_len + 1)])
 
                 m_lst.append(slided_x)
@@ -335,9 +334,9 @@ def load_agg_selected_data_mem(
 
     # [slided, ncells, day, nsteps, nfeatures]
     print("after day window sliding")
-    full_m = np.stack(full_m_lst, axis=1) # [slided, ncells, day, nsteps+1, nfeatures]
-    full_x = np.stack(full_x_lst, axis=1) # [slided, ncells, day, nsteps, nfeatures]
-    full_y = np.stack(full_y_lst, axis=1) # [slided, ncells, day, 1, nfeatures]
+    full_m = np.stack(full_m_lst, axis=1)  # [slided, ncells, day, nsteps+1, nfeatures]
+    full_x = np.stack(full_x_lst, axis=1)  # [slided, ncells, day, nsteps, nfeatures]
+    full_y = np.stack(full_y_lst, axis=1)  # [slided, ncells, day, 1, nfeatures]
     full_dt = np.stack(full_dt_lst, axis=1)  # [slided, ncells, day, 1]
     full_cell = np.stack(full_cell_lst, axis=1)  # [slided, ncells, day, 1]
 
@@ -345,14 +344,14 @@ def load_agg_selected_data_mem(
         print(arg.shape)
 
     # memory sliding for each cell
-    x_start_day = mem_len+1
+    x_start_day = mem_len + 1
     total_m = []
     total_x = []
     total_y = []
     total_dt = []
     total_cell = []
     for i in range(x_start_day, full_m.shape[2]):
-        total_m.append(full_m[:,:,i-mem_len:i,:,:])
+        total_m.append(full_m[:, :, i - mem_len:i, :, :])
         total_x.append(full_x[:, :, i, :, :])
         total_y.append(full_y[:, :, i, :, :])
         total_dt.append(full_dt[:, :, i, :])
@@ -373,10 +372,10 @@ def load_agg_selected_data_mem(
 
     # squeezing
     total_y = np.squeeze(total_y)
-    total_y = np.expand_dims(total_y, axis=1)     ## warning : only when using 1 cell !!
+    total_y = np.expand_dims(total_y, axis=1)  ## warning : only when using 1 cell !!
     total_dt_cell0 = np.squeeze(total_dt_cell0)
     total_dt = np.squeeze(total_dt)
-    total_cell= np.squeeze(total_cell)
+    total_cell = np.squeeze(total_cell)
     print("after memory sliding")
     for arg in [total_x, total_y, total_dt, total_cell, total_m]:
         print(arg.shape)
@@ -391,10 +390,10 @@ def load_agg_selected_data_mem(
         if y_len == 1:
             d = total_dt_cell0[i]
         else:
-            d = total_dt_cell0[i,0]
+            d = total_dt_cell0[i, 0]
 
         if d == str(start_dt):
-            test_ind = i+1
+            test_ind = i + 1
             break
     assert test_ind != -1
     print("test ind: {}".format(test_ind))
@@ -408,7 +407,7 @@ def load_agg_selected_data_mem(
         '''making shape [slided * ncells, nsteps, nfeatures]'''
         shapes = arg.shape
         right = [shapes[i] for i in range(2, len(shapes))]
-        out = np.reshape(arg, [-1]+right)
+        out = np.reshape(arg, [-1] + right)
         return out
 
     # [slided * ncells, nsteps, nf]
@@ -422,7 +421,7 @@ def load_agg_selected_data_mem(
     te_m = _time_concat(total_m[test_ind:])
     te_c = _time_concat(total_cell[test_ind:])
 
-    if seed :
+    if seed:
         np.random.seed(seed)
     dev_len = int(len(tr_x) * dev_ratio)
     dev_ind = np.random.permutation(len(tr_x))[:dev_len]
@@ -446,23 +445,22 @@ def load_agg_selected_data_mem(
 
 
 def load_agg_data_all(data_path='../data/aggregated_data_5min_scaled.csv', ncells=20, test_len=7):
-
     data = pd.read_csv(data_path, index_col=0)
     data.index = pd.to_datetime(data.index)
 
     full_x = []
 
-    for cell_id in range(ncells): # config
-        cell_data = data[data['CELL_NUM']==cell_id]
+    for cell_id in range(ncells):  # config
+        cell_data = data[data['CELL_NUM'] == cell_id]
 
         # Find last test_len days to generate cell vectors
         end_dt = cell_data.index.date[-1]
         from datetime import timedelta
-        start_dt = end_dt-timedelta(days=6)
-        cell_x = cell_data[start_dt : end_dt+timedelta(days=1)]
+        start_dt = end_dt - timedelta(days=6)
+        cell_x = cell_data[start_dt: end_dt + timedelta(days=1)]
         full_x.append(cell_x)
 
-    full_x = np.stack(full_x, axis=0) # [ncells, t, d]
+    full_x = np.stack(full_x, axis=0)  # [ncells, t, d]
     full_x = np.expand_dims(full_x, axis=0)
     full_x = full_x[:, :, :, :-1]
 
@@ -523,13 +521,13 @@ def get_datasets_from_dir(preprocessed_dir, batch_size, train_cells=1.0, valid_c
     logger.info('Dataset Summary')
     logger.info(' - Used {:6d} cells of {:6d} total cells ({:2.2f}%)'.format(n_train_set + n_valid_set + n_test_set,
                                                                              n_preprocessed_files, (
-                                                                                         n_train_set + n_valid_set + n_test_set) / n_preprocessed_files * 100))
+                                                                                 n_train_set + n_valid_set + n_test_set) / n_preprocessed_files * 100))
     logger.info(' - Train Dataset: {:6d} cells ({:02.2f}% of used cells)'.format(n_train_set, n_train_set / (
-                n_train_set + n_valid_set + n_test_set) * 100))
+        n_train_set + n_valid_set + n_test_set) * 100))
     logger.info(' - Valid Dataset: {:6d} cells ({:02.2f}% of used cells)'.format(n_valid_set, n_valid_set / (
-                n_train_set + n_valid_set + n_test_set) * 100))
+        n_train_set + n_valid_set + n_test_set) * 100))
     logger.info(' - Test Dataset : {:6d} cells ({:02.2f}% of used cells)'.format(n_test_set, n_test_set / (
-                n_train_set + n_valid_set + n_test_set) * 100))
+        n_train_set + n_valid_set + n_test_set) * 100))
     logger.info('')
     logger.info('Trainset Summary')
     logger.info(' - Row / Cell: {:9d} rows / cell'.format(n_rows_per_file))
@@ -588,6 +586,7 @@ def get_datasets_from_dir(preprocessed_dir, batch_size, train_cells=1.0, valid_c
         # return current batch
         yield train_X, train_Y, train_M, valid_X, valid_Y, valid_M, test_X, test_Y, test_M
 
+
 # get dataset from given filenames
 def read_npz_files(preprocessed_dir, files_to_read):
     X, Y, M = None, None, None
@@ -604,16 +603,19 @@ def read_npz_files(preprocessed_dir, files_to_read):
 
     return X.reshape(-1, 10, 8), Y.reshape(-1, 8), M.reshape(-1, 77, 8)
 
+
 # get dataset from given filename
-def read_npz_file(preprocessed_dir, filename):
-    read_npz = np.load(os.path.join(preprocessed_dir, filename))
+def read_npz_file(filename):
+    read_npz = np.load(filename)
     return read_npz['X'].reshape(-1, 10, 8), read_npz['Y'].reshape(-1, 8), read_npz['M'].reshape(-1, 77, 8)
+
 
 # get feature label list for training
 def get_feature_label_list(data_seq):
     X, Y, M = data_seq
     length = X.shape[0]
     return [([X[i], M[i]], Y[i]) for i in range(length)]
+
 
 # get dataset from given preprocessed_dir parallelly by spark
 def get_datasets_from_dir_spark(sc, preprocessed_dir, batch_size, train_cells=1.0, valid_cells=0, test_cells=0):
@@ -661,13 +663,13 @@ def get_datasets_from_dir_spark(sc, preprocessed_dir, batch_size, train_cells=1.
     logger.info('Dataset Summary')
     logger.info(' - Used {:6d} cells of {:6d} total cells ({:2.2f}%)'.format(n_train_set + n_valid_set + n_test_set,
                                                                              n_preprocessed_files, (
-                                                                                         n_train_set + n_valid_set + n_test_set) / n_preprocessed_files * 100))
+                                                                                 n_train_set + n_valid_set + n_test_set) / n_preprocessed_files * 100))
     logger.info(' - Train Dataset: {:6d} cells ({:02.2f}% of used cells)'.format(n_train_set, n_train_set / (
-                n_train_set + n_valid_set + n_test_set) * 100))
+        n_train_set + n_valid_set + n_test_set) * 100))
     logger.info(' - Valid Dataset: {:6d} cells ({:02.2f}% of used cells)'.format(n_valid_set, n_valid_set / (
-                n_train_set + n_valid_set + n_test_set) * 100))
+        n_train_set + n_valid_set + n_test_set) * 100))
     logger.info(' - Test Dataset : {:6d} cells ({:02.2f}% of used cells)'.format(n_test_set, n_test_set / (
-                n_train_set + n_valid_set + n_test_set) * 100))
+        n_train_set + n_valid_set + n_test_set) * 100))
     logger.info('')
     logger.info('Trainset Summary')
     logger.info(' - Row / Cell: {:9d} rows / cell'.format(n_rows_per_file))
@@ -677,17 +679,42 @@ def get_datasets_from_dir_spark(sc, preprocessed_dir, batch_size, train_cells=1.
     logger.info(' - Batch Step: {:9d} batches / epoch'.format(math.ceil(n_total_rows / batch_size)))
     logger.info('')
 
-    train_data = sc.parallelize(train_files).\
-        map(lambda file: read_npz_file(preprocessed_dir, file)).\
+    # train_data = sc.parallelize(train_files).\
+    #     map(lambda file: read_npz_file(preprocessed_dir, file)).\
+    #     flatMap(lambda data_seq: get_feature_label_list(data_seq))
+    train_data = sc.parallelize(train_files). \
+        mapPartition(copy_to_local_file). \
+        map(lambda file: read_npz_file(file)). \
         flatMap(lambda data_seq: get_feature_label_list(data_seq))
+    # train_data = sc.binaryFiles(preprocessed_dir). \
+    #     map(lambda stream: np.frombuffer(stream.toArray())). \
+    #     flatMap(lambda data_seq: get_feature_label_list(data_seq))
     val_data = sc.parallelize(valid_files). \
-        map(lambda file: read_npz_file(preprocessed_dir, file)).\
+        mapPartition(copy_to_local_file). \
+        map(lambda file: read_npz_file(file)). \
         flatMap(lambda data_seq: get_feature_label_list(data_seq))
     test_data = sc.parallelize(test_files). \
-        map(lambda file: read_npz_file(preprocessed_dir, file)).\
+        mapPartition(copy_to_local_file). \
+        map(lambda file: read_npz_file(file)). \
         flatMap(lambda data_seq: get_feature_label_list(data_seq))
-
     return train_data, val_data, test_data
+
+
+def copy_to_local_file(list_of_files):
+    final_iterator = []
+    import os
+    for file in list_of_files:
+        import tempfile
+        dir = tempfile.mkdtemp()
+        basename = os.path.basename(file)
+        destfile = os.path.join(dir, basename)
+        cmd = "hdfs dfs -get " + file + " " + destfile
+        status = os.system(cmd)
+        if status != 0:
+            print("error code: " + status)
+            exit(status)
+        final_iterator.append(destfile)
+    return iter(final_iterator)
 
 
 if __name__ == "__main__":
