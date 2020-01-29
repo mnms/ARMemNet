@@ -202,8 +202,17 @@ def get_datasets_from_dir_spark(sc, preprocessed_dir, batch_size, train_cells=1.
     logger = logging.getLogger()
 
     # load preprocessed files from dir & get total rows
-    preprocessed_files = os.listdir(preprocessed_dir)
+
+    cmd = "hdfs dfs -ls " + preprocessed_dir
+    out = os.popen(cmd)
+    preprocessed_files = [fileline.split(' ')[-1][:-1] for fileline in out.readlines()[1:]]
+    # for fileline in out.readlines()[1:]:
+    #     file_path = fileline.split(' ')[-1]
+    #     preprocessed_files.append(file_path)
+
+    # preprocessed_files = os.listdir(preprocessed_dir)
     n_preprocessed_files = len(preprocessed_files)
+    print("n_preprocessed_files: ", n_preprocessed_files)
 
     # split train / valid / test set
     if train_cells <= 1.0:
@@ -234,8 +243,20 @@ def get_datasets_from_dir_spark(sc, preprocessed_dir, batch_size, train_cells=1.
     assert n_train_set + n_valid_set + n_test_set <= n_preprocessed_files
 
     # define train_set properties
-    n_rows_per_file = np.load(os.path.join(preprocessed_dir, train_files[0]))['X'].shape[0]
+    if not os.path.exists("/tmp/skt"):
+        os.mkdir("/tmp/skt")
+    basename = os.path.basename(train_files[0])
+    # destfile = os.path.join(dir, basename)
+    destfile = os.path.join("/tmp/skt", basename)
+    cmd = ' '.join(["hdfs dfs -get", train_files[0], destfile])
+    status = os.system(cmd)
+    if status != 0:
+        print("error code: " + str(status))
+        exit(status)
+
+    n_rows_per_file = np.load(destfile)['X'].shape[0]
     n_total_rows = n_train_set * n_rows_per_file
+
 
     # log dataset info
     logger.info('')
@@ -262,18 +283,18 @@ def get_datasets_from_dir_spark(sc, preprocessed_dir, batch_size, train_cells=1.
     #     map(lambda file: read_npz_file(preprocessed_dir, file)).\
     #     flatMap(lambda data_seq: get_feature_label_list(data_seq))
     train_data = sc.parallelize(train_files). \
-        mapPartition(copy_to_local_file). \
+        mapPartitions(copy_to_local_file). \
         map(lambda file: read_npz_file(file)). \
         flatMap(lambda data_seq: get_feature_label_list(data_seq))
     # train_data = sc.binaryFiles(preprocessed_dir). \
     #     map(lambda stream: np.frombuffer(stream.toArray())). \
     #     flatMap(lambda data_seq: get_feature_label_list(data_seq))
     val_data = sc.parallelize(valid_files). \
-        mapPartition(copy_to_local_file). \
+        mapPartitions(copy_to_local_file). \
         map(lambda file: read_npz_file(file)). \
         flatMap(lambda data_seq: get_feature_label_list(data_seq))
     test_data = sc.parallelize(test_files). \
-        mapPartition(copy_to_local_file). \
+        mapPartitions(copy_to_local_file). \
         map(lambda file: read_npz_file(file)). \
         flatMap(lambda data_seq: get_feature_label_list(data_seq))
     return train_data, val_data, test_data
@@ -283,15 +304,17 @@ def copy_to_local_file(list_of_files):
     final_iterator = []
     import os
     for file in list_of_files:
-        import tempfile
-        dir = tempfile.mkdtemp()
+        if not os.path.exists("/tmp/skt"):
+            os.mkdir("/tmp/skt")
         basename = os.path.basename(file)
-        destfile = os.path.join(dir, basename)
-        cmd = "hdfs dfs -get " + file + " " + destfile
-        status = os.system(cmd)
-        if status != 0:
-            print("error code: " + status)
-            exit(status)
+        destfile = os.path.join("/tmp/skt", basename)
+        if not os.path.exists(destfile):
+            cmd = "hdfs dfs -get " + file + " " + destfile
+            status = os.system(cmd)
+            if status != 0:
+                print("error code: " + status)
+                exit(status)
+            print("download hdfs file", destfile)
         final_iterator.append(destfile)
     return iter(final_iterator)
 

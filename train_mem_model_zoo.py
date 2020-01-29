@@ -1,7 +1,7 @@
 from zoo import init_nncontext
 from zoo.tfpark import TFOptimizer, TFDataset
 from bigdl.optim.optimizer import *
-from data_utils import load_agg_selected_data_mem_train, get_datasets_from_dir, get_datasets_from_dir_spark
+from data_utils import get_datasets_from_dir, get_datasets_from_dir_spark
 from AR_mem.config import Config
 from AR_mem.model import Model
 from time import time
@@ -60,11 +60,17 @@ if __name__ == "__main__":
     #
     # model = Model(config, dataset.tensors[0], dataset.tensors[1], dataset.tensors[2])
 
+    # train_rdd, val_rdd, test_rdd = \
+    #     get_datasets_from_dir_spark(sc, config.data_path, config.batch_size,
+    #                                 train_cells=config.num_cells_train,
+    #                                 valid_cells=config.num_cells_valid,
+    #                                 test_cells=config.num_cells_test)
+
     train_rdd, val_rdd, test_rdd = \
         get_datasets_from_dir_spark(sc, config.data_path, config.batch_size,
-                                    train_cells=config.num_cells_train,
-                                    valid_cells=config.num_cells_valid,
-                                    test_cells=config.num_cells_test)
+                                    train_cells=0.8,
+                                    valid_cells=0.2,
+                                    test_cells=0)
 
     dataset = TFDataset.from_rdd(train_rdd,
                                  features=[(tf.float32, [10, 8]), (tf.float32, [77, 8])],
