@@ -4,7 +4,25 @@ import numpy as np
 import logging
 import pickle
 
+import torch
+import torch.utils.data as tud
+
 logger = logging.getLogger()
+
+
+class BatchDataset(tud.Dataset):
+    def __init__(self, train_x, train_m, train_y):
+        assert len(train_x) == len(train_y) == len(train_m)
+
+        self.train_x = train_x
+        self.train_m = train_m
+        self.train_y = train_y
+
+    def __getitem__(self, idx):
+        return torch.tensor(self.train_x[idx]), torch.tensor(self.train_m[idx]), torch.tensor(self.train_y[idx])
+
+    def __len__(self):
+        return len(self.train_x)
 
 
 def batch_loader(iterable, batch_size, shuffle=False):
