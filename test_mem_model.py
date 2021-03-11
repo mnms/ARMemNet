@@ -1,3 +1,4 @@
+import tensorflow as tf
 import os
 from utils import get_logger, make_date_dir, find_latest_dir
 from data_utils import load_agg_selected_data_mem, batch_loader
@@ -25,15 +26,20 @@ def main():
             test_len=config.test_len, \
             seed=config.seed)
                     
-        model = Model(config)
-        if config.latest_model:
-            model_dir = find_latest_dir(os.path.join(config.model, 'model_save/'))
-        else:
-            if not model_dir:
-                raise Exception("model_dir or latest_model=True should be defined in config")
-            model_dir = config.model_dir
+        # please set the latest file path to deploy this test on config file.
+        model = tf.keras.models.load_model(config.latest_model_file)
+        # test function
+        @tf.function
+        def test_step(train_data, memories, labels):
+            preds = model(train_data, memories,training=False)
+            t_loss_mse = MSE(labels, preds)
+            t_loss_rse = RSE(labels, preds)
+            t_loss_smape = SMAPE(labels, preds)
+            t_loss_mae = MAE(labels, preds)
 
-        model.restore_session(model_dir)
+            test_loss_mse(t_loss_mse)
+            test_accuracy(labels, preds)
+
         if len(test_y) > 100000:
             # Batch mode
             test_data = list(zip(test_x, test_m, test_y))
@@ -42,12 +48,12 @@ def main():
 
             for batch in test_batches:
                 batch_x, batch_m, batch_y = zip(*batch)
-                pred, _, _, _, _ = model.eval(batch_x, batch_m, batch_y)
-                total_pred = np.r_[total_pred, pred]
+                test_step(batch_x, batch_m, batch_y)
+                total_pred = np.r_[total_pred, test_loss_mse.result()]
                           
         else:
             # Not batch mode
-            total_pred, test_loss, test_rse, test_smape, test_mae = model.eval(test_x, test_m, test_y)
+            test_step(test_x, test_m, test_y)
 
         result_dir = make_date_dir(os.path.join(config.model, 'results/'))
         np.save(os.path.join(result_dir, 'pred.npy'), total_pred)
