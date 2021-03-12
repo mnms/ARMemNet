@@ -24,7 +24,7 @@ class AR_Mem(Model):
 
         def build(self):
             w_init = initializers.GlorotUniform()
-            self.w = tf.Variable(initial_value=w_init(shape=(self.x_len, self.nfeatures]), dtype='float32'), trainable=True, name='w')
+            self.w = tf.Variable(initial_value=w_init(shape=(self.x_len, self.nfeatures), dtype='float32'), trainable=True, name='w')
             b_init = initializers.Zeros()
             self.b = tf.Variable(initial_value=b_init(shape=(self.nfeatures), dtype='float32'), trainable=True, name='bias')
 
@@ -50,7 +50,7 @@ class AR_Mem(Model):
                     kernel_regularizer=self.regularizer)
             self.Projection_add = Add()
             self.Projection_act = Activation(tf.nn.tanh)
-            self.SimMatrix_dense = Dense(1, activation=None \
+            self.SimMatrix_dense = Dense(1, activation=None, \
                     use_bias=False, kernel_initializer='glorot_uniform', kernel_regularizer = self.regularizer)
             self.SimMatrix_softmax = Softmax(1)
             self.Context_matmul = Multiply()

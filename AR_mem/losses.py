@@ -4,7 +4,7 @@ from tensorflow.keras.losses import Loss
 class RSE(Loss):
     def call(self, label, pred):
         error = tf.math.reduce_sum((label - pred) ** 2) ** 0.5
-        denom = tf.math.reduce_sum((label - tf.reduce_mean(label) ** 2) ** 0.5
+        denom = tf.math.reduce_sum((label - tf.reduce_mean(label)) ** 2) ** 0.5
         rse = error / denom
         return rse
 
