@@ -176,7 +176,7 @@ def main():
             logger.info('\n===================================================')
             logger.info('Epoch {}, '.format(epoch+1))
             logger.info('Loss: {}, '.format(train_loss_mse.result()))
-            logger.info('Accuracy: {}, '.format(train_accuracy.result() * 100)
+            logger.info('Accuracy: {}, '.format(train_accuracy.result() * 100))
             logger.info('Test Loss: {}, '.format(test_loss_mse.result()))
             logger.info('Test Accuracy: {}'.format(test_accuracy.result() * 100))
             logger.info('===================================================\n\n')
