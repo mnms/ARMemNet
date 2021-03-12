@@ -6,7 +6,6 @@ import pickle
 
 logger = logging.getLogger()
 
-
 def batch_loader(iterable, batch_size, shuffle=False):
     length = len(iterable)
     if shuffle:

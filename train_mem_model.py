@@ -7,7 +7,7 @@ from data_utils import load_agg_selected_data_mem, batch_loader
 import numpy as np
 from time import time
 from AR_mem.config import Config
-from AR_mem.model import Model
+from AR_mem.model import ARMemNet
 from AR_mem.losses import RSE, SMAPE
 
 def main():
@@ -21,15 +21,20 @@ def main():
     if gpus:
         tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
 
-
-
     config = Config()
-
-        
     logger, log_dir = get_logger(os.path.join(config.model, "logs/"))
-    logger.info("=======Model Configuration=======")
+    logger.info("======================    Environment Configuration    ======================")
+    logger.info("TensorFlow version : {}".format(tf.__version__))
+    logger.info("Eager execution    : {}".format(tf.executing_eagerly()))
+    logger.info("GPU List%d         :")
+    for idx in range(len(gpus)):
+        logger.info("GPU[%d]   =  "%(idx) + '{}'.format(gpus[idx]))
+    logger.info("Horovod Rank       : {}".format(hvd.rank()))
+    logger.info("=============================================================================")
+        
+    logger.info("======================        Model Configuration      ======================")
     logger.info(config.desc)
-    logger.info("=================================")
+    logger.info("=============================================================================")
     
     try:       
         # Data preparation
@@ -37,15 +42,23 @@ def main():
         # For example, 
         # Call the get_dataset function you created, this time with the Horovod rank and size
         # (x_train, y_train), (x_test, y_test) = get_dataset(num_classes, hvd.rank(), hvd.size())
-        train_x, dev_x, test_x, train_y, dev_y, test_y, train_m, dev_m, test_m, test_dt = load_agg_selected_data_mem(data_path=config.data_path, \
-            x_len=config.x_len, \
-            y_len=config.y_len, \
-            foresight=config.foresight, \
-            cell_ids=config.train_cell_ids, \
-            dev_ratio=config.dev_ratio, \
-            test_len=config.test_len, \
-            seed=config.seed)
+        #train_x, dev_x, test_x, train_y, dev_y, test_y, train_m, dev_m, test_m, test_dt = load_agg_selected_data_mem(data_path=config.data_path, \
+        #    x_len=config.x_len, \
+        #    y_len=config.y_len, \
+        #    foresight=config.foresight, \
+        #    cell_ids=config.train_cell_ids, \
+        #    dev_ratio=config.dev_ratio, \
+        #    test_len=config.test_len, \
+        #    seed=config.seed)
+        train_x = np.random.rand(5000, 10, 8)
+        train_m = np.random.rand(5000, 77, 8)
+        train_y = np.random.rand(5000, 8)
+
+        test_x = np.random.rand(2000, 10, 8)
+        test_m = np.random.rand(2000, 77, 8)
+        test_y = np.random.rand(2000, 8)
         train_data = list(zip(train_x, train_m, train_y))
+        test_data = list(zip(train_x, train_m, train_y))
 
         # Model
         model_dir = make_date_dir(os.path.join(config.model, 'model_save/'))
@@ -54,15 +67,12 @@ def main():
         if os.path.exists(model_file):
             model = tf.keras.models.load_model(model_file)
         else:
-            model = Model(config)
+            model = ARMemNet(config)
 
 
 
         # Define Optimizer and loss functions
-        optimizer = tf.keras.optimizers.Adam(learning_rate=(config.lr*hvd.size()))
-        # checkpointer setting
-        checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
-        status = checkpoint.restore(tf.train.latest_checkpoint(model_file))
+        optimizer = tf.keras.optimizers.Adam(learning_rate=(config.lr * hvd.size()))
 
         MSE = tf.keras.losses.MeanSquaredError()
         MAE = tf.keras.losses.MeanAbsoluteError()
@@ -76,12 +86,14 @@ def main():
         test_loss_smape = tf.keras.metrics.Mean(name='test_loss_smap')
         test_loss_mae   = tf.keras.metrics.Mean(name='test_loss_mae')
         test_accuracy   = tf.keras.metrics.Accuracy(name='test_accuracy')
+        ##pred = model(train_x, train_m)
+        ##model.summary()
 
         # train function
         @tf.function
         def train_step(train_data, memories, labels, first_batch):
-            with tf.GradientTape as tape:
-                preds = model(train_data, memories, training=True)
+            with tf.GradientTape() as tape:
+                preds = model([train_data, memories], training=True)
                 loss_mse = MSE(labels, preds)
                 loss_rse = RSE(labels, preds)
                 loss_smape = SMAPE(labels, preds)
@@ -91,7 +103,7 @@ def main():
 
             grads = tape.gradient(loss_mse, model.trainable_variables)
             clipped_grads = tf.clip_by_global_norm(grads, config.clip)
-            optimizer.apply_gradient(zip(grads, model.trainable_variables))
+            optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
             # Horovod: broadcast initial variable states from rank 0 to all other processes.
             # This is necessary to ensure consistent initialization of all workers when
@@ -111,8 +123,8 @@ def main():
 
         # test function
         @tf.function
-        def test_step(train_data, memories, labels):
-            preds = model(train_data, memories,training=False)
+        def test_step(test_data, memories, labels):
+            preds = model([test_data, memories],training=False)
             t_loss_mse = MSE(labels, preds)
             t_loss_rse = RSE(labels, preds)
             t_loss_smape = SMAPE(labels, preds)
@@ -130,8 +142,8 @@ def main():
         logger.info("Start training")
         start_time = time()
         for i in range(config.num_epochs):
-            train_batches = batch_loader(train_data, config.batch_size)
-            test_batches = batch_loader(test_data, config.batch_size)
+            train_batches = batch_loader(train_data, config.batch_size // hvd.size())
+            test_batches = batch_loader(test_data, config.batch_size // hvd.size())
             epoch = i+1
 
             test_loss_mse.reset_states()
@@ -146,7 +158,7 @@ def main():
             train_accuracy.reset_states()
 
             # Horovod: adjust number of steps based on number of GPUs.
-            for batch_idx, batch_train in enumerate(train_batches.take(1000 // hvd.size())):
+            for batch_idx, batch_train in enumerate(train_batches):
                 batch_x, batch_m, batch_y = zip(*batch_train)
                 train_step(batch_x, batch_m, batch_y, batch_idx == 0)
 
@@ -155,7 +167,7 @@ def main():
                                 (epoch+1, batch_idx, train_loss_mse.result(), train_loss_rse.result() \
                                         , train_loss_smape.result(), train_loss_mae.result()))
             
-            for batch_idx, batch_test in enumerate(test_batches.take(1000// hvd.size())):
+            for batch_idx, batch_test in enumerate(test_batches):
                 batch_x, batch_m, batch_y = zip(*batch_test)
                 test_step(batch_x, batch_m, batch_y)
 
@@ -167,13 +179,13 @@ def main():
                                 (test_loss_mse.result(), test_loss_rse.result(), test_loss_smape.result(), test_loss_mae.result()))
                 if hvd.rank() == 0:
                     logger.info("Saving model at {}".format(model_dir))
-                    model.save(model_file + '_epoch%d'%(i))
+                    model.save(model_file+'_epoch%d'%(i))
             else: 
                 no_improv += 1
                 if no_improv == config.nepoch_no_improv:
                     logger.info("No improvement for %d epochs" % no_improv)
                     break
-            logger.info('\n===================================================')
+            logger.info('===================================================')
             logger.info('Epoch {}, '.format(epoch+1))
             logger.info('Loss: {}, '.format(train_loss_mse.result()))
             logger.info('Accuracy: {}, '.format(train_accuracy.result() * 100))
@@ -186,6 +198,7 @@ def main():
         logger.info("Saving model at {}".format(model_dir))
         logger.info("Elapsed training time {0:0.2f} mins".format(elapsed/60))
         logger.info("Training finished, exit program")
+
         if hvd.rank() == 0:
             logger.info("Saving final model at {}".format(model_dir))
             model.save(model_file + '_final')

@@ -31,7 +31,7 @@ def main():
         # test function
         @tf.function
         def test_step(train_data, memories, labels):
-            preds = model(train_data, memories,training=False)
+            preds = model([train_data, memories],training=False)
             t_loss_mse = MSE(labels, preds)
             t_loss_rse = RSE(labels, preds)
             t_loss_smape = SMAPE(labels, preds)
