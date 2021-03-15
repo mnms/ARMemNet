@@ -5,8 +5,8 @@ from data_utils import load_agg_selected_data_mem, batch_loader
 import numpy as np
 from time import time
 from AR_mem.config import Config
-from AR_mem.model import Model
-
+from AR_mem.model import ARMemNet
+from AR_mem.losses import RSE, SMAPE
 
 def main():
     config = Config()
@@ -27,7 +27,15 @@ def main():
             seed=config.seed)
                     
         # please set the latest file path to deploy this test on config file.
-        model = tf.keras.models.load_model(config.latest_model_file)
+        if config.latest_model:
+            model_dir = find_latest_dir(os.path.join(config.model, 'model_save/'))
+            model_dir = os.path.join(model_dir, 'AR_mem_final/')
+        else:
+            if not model_dir:
+                raise Exception("model_dir or latest_model=True should be defined in config")
+            model_dir = config.model_dir
+        model = tf.keras.models.load_model(model_dir, compile=False)
+
         # test function
         @tf.function
         def test_step(train_data, memories, labels):

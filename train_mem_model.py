@@ -13,13 +13,15 @@ from AR_mem.losses import RSE, SMAPE
 def main():
     #Initialize Horovod
     hvd.init()
+    print("hvd rank: {}, size: {}".format(hvd.rank(), hvd.size()))
+
 
     #Pin GPU to be used to process local rank (one GPU per Process)
     gpus = tf.config.experimental.list_physical_devices('GPU')
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
-    if gpus:
-        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
+#    if gpus:
+#        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
 
     config = Config()
     logger, log_dir = get_logger(os.path.join(config.model, "logs/"))
@@ -41,22 +43,15 @@ def main():
         # [TODO] Need to apply horovod distributed environment for data loader !!!!!!!
         # For example, 
         # Call the get_dataset function you created, this time with the Horovod rank and size
-        # (x_train, y_train), (x_test, y_test) = get_dataset(num_classes, hvd.rank(), hvd.size())
-        #train_x, dev_x, test_x, train_y, dev_y, test_y, train_m, dev_m, test_m, test_dt = load_agg_selected_data_mem(data_path=config.data_path, \
-        #    x_len=config.x_len, \
-        #    y_len=config.y_len, \
-        #    foresight=config.foresight, \
-        #    cell_ids=config.train_cell_ids, \
-        #    dev_ratio=config.dev_ratio, \
-        #    test_len=config.test_len, \
-        #    seed=config.seed)
-        train_x = np.random.rand(5000, 10, 8)
-        train_m = np.random.rand(5000, 77, 8)
-        train_y = np.random.rand(5000, 8)
-
-        test_x = np.random.rand(2000, 10, 8)
-        test_m = np.random.rand(2000, 77, 8)
-        test_y = np.random.rand(2000, 8)
+        #(x_train, y_train), (x_test, y_test) = get_dataset(num_classes, hvd.rank(), hvd.size())
+        train_x, dev_x, test_x, train_y, dev_y, test_y, train_m, dev_m, test_m, test_dt = load_agg_selected_data_mem(data_path=config.data_path, \
+            x_len=config.x_len, \
+            y_len=config.y_len, \
+            foresight=config.foresight, \
+            cell_ids=config.train_cell_ids, \
+            dev_ratio=config.dev_ratio, \
+            test_len=config.test_len, \
+            seed=config.seed)
         train_data = list(zip(train_x, train_m, train_y))
         test_data = list(zip(train_x, train_m, train_y))
 
@@ -174,6 +169,7 @@ def main():
             if test_loss_mse.result() < best_loss:
                 best_loss = test_loss_mse.result()
                 no_improv = 0
+                logger.info("hvd.local_rank: {}, hvd.rank: {}".format(hvd.local_rank(), hvd.rank()))
                 if hvd.local_rank() == 0:
                     logger.info("New score! : dev_loss: %.4f, dev_rse: %.4f, dev_smape: %.4f, dev_mae: %.4f" % 
                                 (test_loss_mse.result(), test_loss_rse.result(), test_loss_smape.result(), test_loss_mae.result()))
