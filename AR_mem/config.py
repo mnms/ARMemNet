@@ -19,26 +19,43 @@ class Config(object):
         self.y_len = 1
         self.foresight = 0 
         self.dev_ratio = 0.1
+        self.train_test_ratio = 0.7
         self.test_len = 7
         self.seed = None
-        self.batch_size = 8
         
         # train & test params
         self.train_cell_ids = [11, 16, 18]  # order of cell_id in "../config_preprocess.py"
         self.test_cell_ids = [18]           # order of cell_id in "../config_preprocess.py"
         self.model_dir = None       # Model directory to use in test mode. For example, "model_save/20190405-05"
         self.latest_model = True    # Use lately saved model in test mode. If latest_model=True, model_dir option will be ignored
+        self.latest_model_dir_cache = 'AR_mem/model_save/latest.cache'
         self.latest_model_file = None # please set file path before deploying test_mem_model
+
+        self.num_data   = 1000000
+        self.train_data_size = int(self.num_data * self.train_test_ratio)
+        self.train_batch_size = int(self.train_data_size / 2)
+        self.train_prefetch_size = 32
+        self.test_data_size = int(self.num_data * (1-self.train_test_ratio))
+        self.test_batch_size = int(self.test_data_size / 2)
+        self.test_prefetch_size = 16 
+
         
         # training params
         self.lr = 1e-3
-        self.num_epochs = 1000
-        self.batch_size = 32
+        self.num_epochs = 50
         self.dropout = 0.8     
         self.nepoch_no_improv = 5
         self.clip = 5
         self.allow_gpu = True
         self.desc = self._desc()
+
+        # Distributed paramas
+        self.num_node  = 1
+        self.ip_list   = ['localhost']
+        self.base_port = 3333 
+        self.num_gpus_per_node = 4
+        self.num_workers = 1
+
             
     def _desc(self):
         desc = ""

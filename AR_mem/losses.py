@@ -1,17 +1,14 @@
 import tensorflow as tf
 
+@tf.function(experimental_compile=True)
 def RSE(label, pred):
-    _label = tf.cast(label, dtype='float32')
-    _pred  = tf.cast(pred, dtype='float32')
+    num = tf.math.sqrt(tf.math.reduce_mean(tf.math.square(label - pred)))
+    print(num)
+    den = tf.math.reduce_std(label, axis=None)
+    print(den)
+    return num/den
 
-    num = tf.math.sqrt(tf.math.reduce_mean(tf.math.square(_label - _pred)))
-    den = tf.math.reduce_std(_label,axis=None)
-    rse = num / den
-    return rse
-
+@tf.function(experimental_compile=True)
 def SMAPE(label, pred):
-    _label = tf.cast(label, dtype='float32')
-    _pred  = tf.cast(pred, dtype='float32')
-
-    smape = tf.math.reduce_mean(2 * tf.math.abs(_label - _pred) / (tf.abs(_label) + tf.abs(_pred)))
+    smape = tf.math.reduce_mean(2 * tf.math.abs(label - pred) / (tf.abs(label) + tf.abs(pred)))
     return smape

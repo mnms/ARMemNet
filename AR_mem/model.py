@@ -18,6 +18,7 @@ class customAutoRegressive(tf.keras.layers.Layer):
         self.b = self.add_weight(name="bias", shape=[self.nfeatures], dtype='float32',\
                 initializer=self.initializer_zeros)
 
+    @tf.function(experimental_compile=True)
     def call(self, inputs):
         _w = tf.expand_dims(self.w, axis=0)
         weighted = tf.math.reduce_sum(inputs * _w, axis=1) + self.b
@@ -48,6 +49,7 @@ class customAttention(tf.keras.layers.Layer):
         self.attention_bias = self.add_weight(name="attention_bias", shape=[self.attention_size], dtype='float32',\
                 initializer=self.initializer_glorot_uniform)
         
+    @tf.function(experimental_compile=True)
     def call(self, inputs): #inputs[0]=inputs inputs[1]=memories
         x = tf.expand_dims(inputs[0], axis=1)
         query = self.Query(x)
@@ -75,15 +77,7 @@ class ARMemNet(tf.keras.Model):
         self.prediction = Dense(self.config.nfeatures, \
                 activation=tf.nn.tanh, use_bias=False, kernel_initializer='glorot_uniform')
 
-    #def call(self, inputs, memories, training=True):
-    #    input_ar, ar_loss_input = self.auto_regressive_input(inputs)
-    #    memories = tf.concat(tf.split(memories, self.config.msteps, axis=1), axis=0)
-    #    memory_ar, ar_loss_memories = self.auto_regressive_memory(memories)
-    #    context=self.attention([input_ar, memory_ar])
-    #    linear_inputs = tf.concat([input_ar, context], axis=1)
-    #    predictions = self.prediction(linear_inputs)
-    #    return predictions
-
+    @tf.function(experimental_compile=True)
     def call(self, inputs, training=True): #inputs[0]=inputs inputs[1]=memories
         input_ar, ar_loss_input = self.auto_regressive_input(inputs[0])
         memories = tf.concat(tf.split(inputs[1], self.config.msteps, axis=1), axis=0)

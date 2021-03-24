@@ -3,8 +3,78 @@ import pandas as pd
 import numpy as np
 import logging
 import pickle
+import tensorflow as tf
+import multiprocessing
+from collections import deque
 
-logger = logging.getLogger()
+class ARmemNet_Dataset():
+    def __init__(self, config, input_1, input_2, label, test_mode=False, shuffle=True, seed=0):
+
+        assert input_1.shape[0] == input_2.shape[0],"Input dataset should have same number of data"
+
+        self.seed = seed
+
+        self.test_mode = test_mode
+        if test_mode == False:
+            self.train_test_ratio = config.train_test_ratio
+            self.train_batch_size = config.train_batch_size
+            self.train_prefetch_size = config.train_prefetch_size
+            self.test_batch_size = config.test_batch_size
+            self.test_prefetch_size = config.test_prefetch_size
+            assert input_1.shape[0] == label.shape[0],"All dataset should have same number of data"
+        else:
+            self.train_test_ratio = 1.0
+        
+        train_indices, test_indices = self.get_train_val_indices(input_1.shape[0], shuffle)
+
+        self.train_input_1 = input_1[train_indices]
+        self.train_input_2 = input_2[train_indices]
+        self.test_input_1  = input_1[test_indices]
+        self.test_input_2  = input_2[test_indices]
+
+        if test_mode == False:
+            self.train_label = label[train_indices]
+            self.test_label  = label[test_indices]
+
+    def get_train_val_indices(self, length, shuffle):
+        assert 0 < self.train_test_ratio <= 1, "Train/ total data ration must be in range (0.0, 1.0]"
+        np.random.seed(self.seed)
+        indices = np.arange(0, length, 1, dtype = np.int)
+
+        if shuffle:
+            np.random.shuffle(indices)
+
+        if not self.train_test_ratio == 1.0:
+            indices = np.array(indices)
+            train_indices = indices[:int(self.train_test_ratio * len(indices))]
+            test_indices = indices[int(self.train_test_ratio * len(indices)):]
+        else:
+            if test_mode == True:
+                train_indices = []
+                test_indices = indices
+            else:
+                train_indices = indices
+                test_indices = []
+        return train_indices, test_indices
+
+    def train_dataloader(self, drop_remainder=True):
+        # Convert the inputs to a Dataset
+        dataset = tf.data.Dataset.from_tensor_slices((self.train_input_1, self.train_input_2, self.train_label))
+        dataset = dataset.cache()
+        # use dataset.map if you need to do preprocess
+        #dataset = dataset.map(self.preprocess, num_parallel_calls = multiprocessing.cpu_count() // self.num_gpu)
+        dataset = dataset.batch(self.train_batch_size, drop_remainder=drop_remainder)
+        return dataset.prefetch(tf.data.AUTOTUNE)
+        #return dataset.prefetch(self.train_prefetch_size)
+
+    def test_dataloader(self, drop_remainder=True):
+        dataset = tf.data.Dataset.from_tensor_slices((self.test_input_1, self.test_input_2, self.test_label))
+        dataset = dataset.cache()
+        # use dataset.map if you need to do preprocess
+        #dataset = dataset.map(self.preprocess, num_parallel_calls = multiprocessing.cpu_count() // self.num_gpu)
+        dataset = dataset.batch(self.test_batch_size, drop_remainder=drop_remainder)
+        return dataset.prefetch(tf.data.AUTOTUNE)
+        #return dataset.prefetch(self.test_prefetch_size)
 
 def batch_loader(iterable, batch_size, shuffle=False):
     length = len(iterable)
@@ -12,7 +82,6 @@ def batch_loader(iterable, batch_size, shuffle=False):
         random.shuffle(iterable)
     for idx in range(0, length, batch_size):
         yield iterable[idx:min(length, idx + batch_size)]
-     
 
 def load_agg_data(
         data_path='../data/aggregated_5min_scaled.csv',
@@ -115,10 +184,6 @@ def load_agg_data(
     train_x, dev_x, test_x = tr_x[tr_ind], tr_x[dev_ind], full_x[test_ind:]
     train_y, dev_y, test_y = tr_y[tr_ind], tr_y[dev_ind], full_y[test_ind:]
     test_dt = full_dt[test_ind:]
-
-    logger.info('X : {}, {}, {}'.format(train_x.shape, dev_x.shape, test_x.shape))
-    logger.info('Y : {}, {}, {}'.format(train_y.shape, dev_y.shape, test_y.shape))
-    logger.info('Test set start time: {}'.format(test_dt[0, 0]))
 
     return train_x, dev_x, test_x, train_y, dev_y, test_y, test_dt
 

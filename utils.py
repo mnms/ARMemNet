@@ -2,6 +2,7 @@ import logging
 import logging.handlers
 import os
 import datetime
+from mpi4py import MPI
 
 def get_logger(log_path='logs/'):
     """
@@ -33,6 +34,15 @@ def get_logger(log_path='logs/'):
     logger.setLevel(logging.INFO)
     logger.info('Writing logs at {}'.format(os.path.join(log_path+name)))
     return logger, log_path+name
+
+def get_mpi_info():
+    comm = MPI.COMM_WORLD
+    size = comm.Get_size()
+    rank = comm.Get_rank()
+    host = comm.Get_attr(MPI.HOST)
+    univ_sz= comm.Get_attr(MPI.UNIVERSE_SIZE)
+    return size, rank, host, univ_sz
+
 
 def make_date_dir(path):
     """
@@ -66,8 +76,17 @@ def find_latest_dir(path):
     latest_dir = str(latest_date) + '-' + '%02d' % latest_num
 
     return os.path.join(path + latest_dir)
-    
-# if __name__=="__main__":
-#     make_date_dir('./log')
-#     get_logger('./log')
-    
+
+def write_latest_dir_to_cache(cache_file, latest_checkpoint_dir):
+    with open(cache_file, "w") as f:
+        f.write(latest_checkpoint_dir)#.encode("utf-8"))
+        f.close()
+
+def read_latest_dir_from_cache(cache_file):
+    if os.path.isfile(cache_file) is False:
+        return None
+
+    with open(cache_file, "r") as f:
+        latest_dir = f.read()#.decode("utf-8")
+        f.close()
+        return latest_dir
