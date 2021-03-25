@@ -1,7 +1,5 @@
 # AR_mem_config
-
-
-class Config(object):
+class Config(dict):
     def __init__(self):
         # model params
         self.model = "AR_mem"
@@ -37,14 +35,15 @@ class Config(object):
         self.clip = 5
         self.allow_gpu = True
         self.desc = self._desc()
+        
+        dict.__init__(self, self.__dict__)
 
     def _desc(self):
         desc = ""
         for mem, val in self.__dict__.items():
             desc += mem + ":" + str(val) + ", "
         return desc
-
-
+    
 if __name__ == "__main__":
     config = Config()
     print(config.desc)

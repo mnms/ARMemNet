@@ -1,64 +1,72 @@
 import os
-from utils import get_logger, make_date_dir, find_latest_dir
-from data_utils import load_agg_selected_data_mem, batch_loader
 import numpy as np
 from time import time
+import tensorflow as tf
+from utils import get_logger, find_latest_dir, make_date_dir
+from data_utils import load_agg_selected_data_mem, batch_loader
 from AR_mem.config import Config
-from AR_mem.model import Model
+from AR_mem.model import ARMemNet, CustomAutoRegressive, CustomAttention
+from AR_mem.losses import RSE, SMAPE
+from tensorflow.keras.losses import MSE, MAE
 
 
 def main():
     config = Config()
-        
+
     logger, log_dir = get_logger(os.path.join(config.model, "logs/"))
     logger.info("=======Model Configuration=======")
     logger.info(config.desc)
     logger.info("=================================")
-    
-    try:       
-        _, _, test_x, _, _, test_y, _, _, test_m, test_dt = load_agg_selected_data_mem(data_path=config.data_path, \
+
+    try:
+        # prepare train, evaluation data
+        _, _, test_x, _, _, test_y, _, _, test_m, _ = load_agg_selected_data_mem(data_path=config.data_path, \
             x_len=config.x_len, \
             y_len=config.y_len, \
             foresight=config.foresight, \
-            cell_ids=config.test_cell_ids, \
+            cell_ids=config.train_cell_ids, \
             dev_ratio=config.dev_ratio, \
             test_len=config.test_len, \
             seed=config.seed)
-                    
-        model = Model(config)
+
+        # metrics
+        MSE = tf.keras.losses.MeanSquaredError()
+        MAE = tf.keras.losses.MeanAbsoluteError()
+
+        # get (latest) model dir
         if config.latest_model:
             model_dir = find_latest_dir(os.path.join(config.model, 'model_save/'))
         else:
             if not model_dir:
                 raise Exception("model_dir or latest_model=True should be defined in config")
             model_dir = config.model_dir
+        ckpt_path = os.path.join(model_dir, 'checkpoint')
 
-        model.restore_session(model_dir)
-        if len(test_y) > 100000:
-            # Batch mode
-            test_data = list(zip(test_x, test_m, test_y))
-            test_batches = batch_loader(test_data, config.batch_size)
-            total_pred = np.empty(shape=(0, test_y.shape[1]))
+        # load model
+        model = ARMemNet(config)
+        model.load_weights(ckpt_path).expect_partial() # exclude optimizer
+        logger.info('model weights loaded from {}'.format(ckpt_path))
 
-            for batch in test_batches:
-                batch_x, batch_m, batch_y = zip(*batch)
-                pred, _, _, _, _ = model.eval(batch_x, batch_m, batch_y)
-                total_pred = np.r_[total_pred, pred]
-                          
-        else:
-            # Not batch mode
-            total_pred, test_loss, test_rse, test_smape, test_mae = model.eval(test_x, test_m, test_y)
+        # predicts w/ test set
+        preds = model([test_x, test_m], training=False)
 
+        # calc metrics
+        loss_mse = MSE(test_y, preds)
+        loss_rse = RSE(test_y, preds)
+        loss_smape = SMAPE(test_y, preds)
+        loss_mae = MAE(test_y, preds)
+
+        logger.info("[Inference Result] mse: {:.4f}, rse: {:.4f}, smape: {:.4f}, mae: {:.4f}".format( \
+            loss_mse, loss_rse, loss_smape, loss_mae))
+
+        # save results
         result_dir = make_date_dir(os.path.join(config.model, 'results/'))
-        np.save(os.path.join(result_dir, 'pred.npy'), total_pred)
+        np.save(os.path.join(result_dir, 'preds.npy'), preds)
         np.save(os.path.join(result_dir, 'test_y.npy'), test_y)
-        np.save(os.path.join(result_dir, 'test_dt.npy'), test_dt)
         logger.info("Saving results at {}".format(result_dir))
-        logger.info("Testing finished, exit program")
-        
+
     except:
         logger.exception("ERROR")
-    
+
 if __name__ == "__main__":
     main()
-    
