@@ -31,14 +31,12 @@ class Config(object):
         self.latest_model_dir_cache = 'AR_mem/model_save/latest.cache'
         self.latest_model_file = None # please set file path before deploying test_mem_model
 
-        self.num_data   = 1000000
-        self.train_data_size = int(self.num_data * self.train_test_ratio)
-        self.train_batch_size = int(self.train_data_size / 2)
-        self.train_prefetch_size = 32
-        self.test_data_size = int(self.num_data * (1-self.train_test_ratio))
-        self.test_batch_size = int(self.test_data_size / 2)
-        self.test_prefetch_size = 16 
-
+        self.num_data       = 160000000
+        self.max_queue_size = 10 
+        self.batch_size     = 800000 #### 2.784kB per a batch 
+                                     #  40GB / 2.784kB = 14357816 batches per 40GB 
+                                     #  20GB / 2.784kB = 7183908 batches per 20GB
+                                     #### Set value as proper batch_size / max_queue_size for model.fit
         
         # training params
         self.lr = 1e-3
@@ -49,13 +47,14 @@ class Config(object):
         self.allow_gpu = True
         self.desc = self._desc()
 
-        # Distributed paramas
-        self.num_node  = 1
-        self.ip_list   = ['localhost']
-        self.base_port = 3333 
-        self.num_gpus_per_node = 4
-        self.num_workers = 1
+        # testing params
+        self.test_model_dir=''
 
+        # Spark Paramas
+        self.num_nodes = 1
+
+        # TF Params
+        self.use_tensorboard = True
             
     def _desc(self):
         desc = ""
