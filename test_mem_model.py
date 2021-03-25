@@ -5,10 +5,8 @@ import tensorflow as tf
 from utils import get_logger, find_latest_dir, make_date_dir
 from data_utils import load_agg_selected_data_mem, batch_loader
 from AR_mem.config import Config
-from AR_mem.model import ARMemNet, CustomAutoRegressive, CustomAttention
+from AR_mem.model import ARMemNet
 from AR_mem.losses import RSE, SMAPE
-from tensorflow.keras.losses import MSE, MAE
-
 
 def main():
     config = Config()
@@ -19,7 +17,7 @@ def main():
     logger.info("=================================")
 
     try:
-        # prepare train, evaluation data
+        # prepare test data
         _, _, test_x, _, _, test_y, _, _, test_m, _ = load_agg_selected_data_mem(data_path=config.data_path, \
             x_len=config.x_len, \
             y_len=config.y_len, \
@@ -63,7 +61,7 @@ def main():
         result_dir = make_date_dir(os.path.join(config.model, 'results/'))
         np.save(os.path.join(result_dir, 'preds.npy'), preds)
         np.save(os.path.join(result_dir, 'test_y.npy'), test_y)
-        logger.info("Saving results at {}".format(result_dir))
+        logger.info("results are saved at {}".format(result_dir))
 
     except:
         logger.exception("ERROR")

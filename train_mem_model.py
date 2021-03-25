@@ -20,8 +20,7 @@ def main():
 
     try:
         # prepare train, evaluation data
-        # train_x, dev_x, _, train_y, dev_y, _, train_m, dev_m, _, _ = load_agg_selected_data_mem(data_path=config.data_path, \
-        train_x, dev_x, test_x, train_y, dev_y, test_y, train_m, dev_m, test_m, _ = load_agg_selected_data_mem(
+        train_x, dev_x, _, train_y, dev_y, _, train_m, dev_m, _, _ = load_agg_selected_data_mem(
             data_path=config.data_path, \
             x_len=config.x_len, \
             y_len=config.y_len, \
