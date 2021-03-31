@@ -1,32 +1,59 @@
 import datetime
 from datetime import datetime, timedelta
 
+from pyspark.sql import DataFrame
 from pyspark.sql import Window
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
+import sys
 
-def data_schema():
-    return StructType() \
-        .add("EVT_DTM", StringType(), True) \
-        .add("CQI", FloatType(), True) \
-        .add("RSRP", FloatType(), True) \
-        .add("RSRQ", FloatType(), True) \
-        .add("DL_PRB_USAGE_RATE", FloatType(), True) \
-        .add("SINR", FloatType(), True) \
-        .add("UE_TX_POWER", FloatType(), True) \
-        .add("PHR", FloatType(), True) \
-        .add("UE_CONN_TOT_CNT", FloatType(), True) \
-        .add("CELL_NUM", IntegerType(), True)
+data_schema = StructType() \
+    .add("EVT_DTM", StringType(), True) \
+    .add("CQI", FloatType(), True) \
+    .add("RSRP", FloatType(), True) \
+    .add("RSRQ", FloatType(), True) \
+    .add("DL_PRB_USAGE_RATE", FloatType(), True) \
+    .add("SINR", FloatType(), True) \
+    .add("UE_TX_POWER", FloatType(), True) \
+    .add("PHR", FloatType(), True) \
+    .add("UE_CONN_TOT_CNT", FloatType(), True) \
+    .add("CELL_NUM", IntegerType(), True)
+
+features = ["CQI", "RSRP", "RSRQ", "DL_PRB_USAGE_RATE", "SINR", "UE_TX_POWER", "PHR", "UE_CONN_TOT_CNT"]
+
+min_max_map = {
+    "cqi": (1.962, 14.985),
+    "rsrp": (-121.0, 0.0),
+    "rsrq": (-20.0, 0.0),
+    "dl_prb_usage_rate": (1.0, 99.577),
+    "sinr": (-3.677, 20.5),
+    "ue_tx_power": (-10.943, 23.0),
+    "phr": (0.5, 52.917),
+    "ue_conn_tot_cnt": (0.0, 144.633)
+}
+
+def normalize_dataframe(dfToNorm):
+    df = dfToNorm
+    for name, min_max in min_max_map.items():
+        min = min_max[0]
+        max = min_max[1]
+        df = df.withColumn(name, (((df[name] - min) * 2.0 / (max - min)) + -1.0).cast("float"))
+    return df
 
 
-def features():
-    return ["CQI", "RSRP", "RSRQ", "DL_PRB_USAGE_RATE", "SINR", "UE_TX_POWER", "PHR", "UE_CONN_TOT_CNT"]
+def unnormalize_dataframe(dfToDenorm):
+    df = dfToDenorm
+    for name, min_max in min_max_map.items():
+        min = min_max[0]
+        max = min_max[1]
+        df = df.withColumn(name, (df[name] + 1.0) * (max - min) / 2.0 + min)
+    return df
 
 
 def training_data_as_pyspark_dataframe(
         input_df,
-        feature=features(),
+        feature=features,
         day_gap=13 * 60 // 5,
         x_len=10,
         mem_len=7
@@ -54,9 +81,10 @@ def training_data_as_pyspark_dataframe(
 
 
 def inference_data_as_pyspark_dataframe(
-        input_df,
-        input_datetime_str,
-        dateformat_str,
+        input_df: DataFrame,
+        input_datetime_str: str,
+        dateformat_str: str,
+        inference_udf,
         x_len=10,
         mem_len=7
 ):
@@ -66,6 +94,13 @@ def inference_data_as_pyspark_dataframe(
             for min in range(5, -(5 * x_len), -5):
                 delta = timedelta(days=day, minutes=min)
                 output.append((d + delta).strftime(dateformat_str))
+        return output
+
+    def buildInputTimeList(d, dateformat_str):
+        output = []
+        for min in range(0, -(5 * x_len), -5):
+            delta = timedelta(minutes=min)
+            output.append((d + delta).strftime(dateformat_str))
         return output
 
     def listToString(l):
@@ -80,15 +115,24 @@ def inference_data_as_pyspark_dataframe(
     input_datetime = datetime.strptime(input_datetime_str, dateformat_str)
     memory_times = buildMemoryTimeList(input_datetime, dateformat_str)
     time_filter = "evt_dtm IN ({})".format(listToString(memory_times))
-    inf_df_memory = input_df.where(time_filter) \
+    normalized_df = normalize_dataframe(input_df)
+    inf_df_memory = normalized_df.where(time_filter) \
         .groupBy("cell_num").pivot("evt_dtm") \
         .agg(array(first("CQI"), first("RSRP"), first("RSRQ"), first("DL_PRB_USAGE_RATE"), first("SINR"),
                    first("UE_TX_POWER"), first("PHR"), first("UE_CONN_TOT_CNT"))) \
-        .select("cell_num", array(memory_times).alias("M"))
-    inf_df_x = input_df.where("evt_dtm == '{}'".format(input_datetime_str)) \
-        .select("cell_num", array("CQI", "RSRP", "RSRQ", "DL_PRB_USAGE_RATE", "SINR", "UE_TX_POWER", "PHR",
-                                  "UE_CONN_TOT_CNT").alias("X"))
+        .select("cell_num", flatten(array(memory_times)).alias("M"))
+    input_times = buildInputTimeList(input_datetime, dateformat_str)
+    time_filter = "evt_dtm IN ({})".format(listToString(input_times))
+    inf_df_x = normalized_df.where(time_filter) \
+        .groupBy("cell_num").pivot("evt_dtm") \
+        .agg(array(first("CQI"), first("RSRP"), first("RSRQ"), first("DL_PRB_USAGE_RATE"), first("SINR"),
+                   first("UE_TX_POWER"), first("PHR"), first("UE_CONN_TOT_CNT"))) \
+        .select("cell_num", flatten(array(input_times)).alias("X"))
     inf_df = inf_df_memory.join(inf_df_x, on='cell_num', how='left')
+    inf_df = inf_df.withColumn("prediction", inference_udf(col("X"), col("M"))).select("cell_num", "prediction")
+    for i in range(len(features)):
+        inf_df = inf_df.withColumn(features[i], element_at("prediction", i + 1))
+    inf_df = unnormalize_dataframe(inf_df.drop("prediction"))
     return inf_df
 
 
@@ -121,8 +165,9 @@ def prepare_inference_data(
 
     for feature in features():
         read_last = last(df_5min[feature], ignorenulls=True).over(window_ff)
-        read_next = first(df_5min[feature], ignorenulls=True).over(window_bf)
-        df_5min = df_5min.withColumn(feature + "_ff", read_last).withColumn(feature, read_next).drop(feature + "_ff")
+        df_5min = df_5min.withColumn(feature + "_ff", read_last)
+        read_next = first(df_5min[feature + "_ff"], ignorenulls=True).over(window_bf)
+        df_5min = df_5min.withColumn(feature, read_next).drop(feature + "_ff")
     df_5min = df_5min.dropna()
 
     return df_5min
