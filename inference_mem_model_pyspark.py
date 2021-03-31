@@ -7,9 +7,9 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
-model_path = "/workspace/ARMemNet_TF2/AR_mem/model_save/20210325-07"
+model_path = "/workspace/ARMemNet/AR_mem/model_save/20210325-07"
 data_path = "hdfs://192.168.201.250:9000/5min_parquet_inference"
-result_path = "/workspace/ARMemNet_TF2/result"
+result_path = "/workspace/ARMemNet/result"
 data_format = "parquet"
 inference_timestr = "20191218220000"
 timestr_format = "%Y%m%d%H%M%S"
