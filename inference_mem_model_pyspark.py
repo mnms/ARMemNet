@@ -42,4 +42,4 @@ df = inference_data_as_pyspark_dataframe(input_df, inference_timestr, timestr_fo
 df.write.mode("overwrite").parquet(result_path)
 
 check = spark.read.parquet(result_path)
-check.select('out').show()
+check.show()

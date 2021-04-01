@@ -16,7 +16,7 @@ timestr_format = "%Y%m%d%H%M%S"
 spark = SparkSession.builder.appName("ARMEM INFERENCE CUDF").getOrCreate()
 
 
-def inference_cudf(*pd_serieses) -> pd.Series:
+def inference_cudf(pd_x: pd.Series, pd_m: pd.Series) -> pd.Series:
     import cudf
 
     model_path = '/workspace/tfspark/model'
@@ -33,9 +33,8 @@ def inference_cudf(*pd_serieses) -> pd.Series:
 
     gdf = cudf.DataFrame()
     # Since it's pd.Series to Series. I have to concat all columns. Liangcai's MapInPandas should help!
-    for i, pd_series in enumerate(pd_serieses):
-        gpu_series = cudf.Series(pd_series)
-        gdf[str(i)] = gpu_series
+    gdf["0"] = cudf.Series(pd_x)
+    gdf["1"] = cudf.Series(pd_m)
 
     tf_input_tsr = cudf_to_tensor(gdf)
     print(gdf.shape)
