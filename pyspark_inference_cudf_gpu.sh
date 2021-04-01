@@ -37,4 +37,4 @@ $SPARK_HOME/bin/spark-submit --master spark://127.0.0.1:7077            \
 --conf spark.rapids.sql.concurrentGpuTasks=2 \
 --conf spark.executor.resource.gpu.discoveryScript=./getGpusResources.sh \
 --files $SPARK_HOME/examples/src/main/scripts/getGpusResources.sh \
-inference_mem_model_pyspark.py
+inference_mem_model_pyspark_cudf.py
