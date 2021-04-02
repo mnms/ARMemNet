@@ -131,7 +131,7 @@ def inference_data_as_pyspark_dataframe(
     inf_df = inf_df_memory.join(inf_df_x, on='cell_num', how='left')
     inf_df = inf_df.withColumn("prediction", inference_udf(col("X"), col("M"))).select("cell_num", "prediction")
     for i in range(len(features)):
-        inf_df = inf_df.withColumn(features[i], element_at("prediction", i + 1))
+        inf_df = inf_df.withColumn(features[i], col("prediction")[i + 1])
     inf_df = unnormalize_dataframe(inf_df.drop("prediction"))
     return inf_df
 
@@ -157,13 +157,13 @@ def prepare_inference_data(
     df_time_cell = df_cell.crossJoin(df_time)
 
     df_5min = raw_data_df.withColumn("cell_num", (col("enb_id") * 100 + col("cell_id"))).select(
-        ["evt_dtm", "cell_num"] + features())
+        ["evt_dtm", "cell_num"] + features)
     df_5min = df_time_cell.join(df_5min, on=["evt_dtm", "cell_num"], how="left")
 
     window_ff = Window().partitionBy(col("cell_num")).orderBy("evt_dtm").rowsBetween(-sys.maxsize, 0)
     window_bf = Window().partitionBy(col("cell_num")).orderBy("evt_dtm").rowsBetween(0, sys.maxsize)
 
-    for feature in features():
+    for feature in features:
         read_last = last(df_5min[feature], ignorenulls=True).over(window_ff)
         df_5min = df_5min.withColumn(feature + "_ff", read_last)
         read_next = first(df_5min[feature + "_ff"], ignorenulls=True).over(window_bf)

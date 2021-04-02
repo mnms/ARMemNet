@@ -26,10 +26,10 @@ def inference(pd_x: pd.Series, pd_m: pd.Series) -> pd.Series:
         except RuntimeError as e:
             print(e)
     model = tf.saved_model.load(model_path)
-    ret = pd.Series()
+    ret = pd.Series([], dtype=np.float32)
     for i in range(pd_x.size):
-        x = np.array(pd_x[i]).reshape(-1, 10, 8)
-        m = np.array(pd_m[i]).reshape(-1, 77, 8)
+        x = pd_x[i].reshape(-1, 10, 8)
+        m = pd_m[i].reshape(-1, 77, 8)
         outputs = model([x, m]).numpy().reshape(-1)
         ret = ret.append(pd.Series([outputs]))
     return ret
