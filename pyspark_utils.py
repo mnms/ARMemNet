@@ -131,7 +131,7 @@ def inference_data_as_pyspark_dataframe(
     inf_df = inf_df_memory.join(inf_df_x, on='cell_num', how='left')
     inf_df = inf_df.withColumn("prediction", inference_udf(col("X"), col("M"))).select("cell_num", "prediction")
     for i in range(len(features)):
-        inf_df = inf_df.withColumn(features[i], col("prediction")[i + 1])
+        inf_df = inf_df.withColumn(features[i], col("prediction")[i])
     inf_df = unnormalize_dataframe(inf_df.drop("prediction"))
     return inf_df
 
