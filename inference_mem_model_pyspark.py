@@ -1,3 +1,4 @@
+import timeit
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -16,7 +17,13 @@ timestr_format = "%Y%m%d%H%M%S"
 
 spark = SparkSession.builder.appName("ARMEM INFERENCE").getOrCreate()
 
+inference_time = spark.sparkContext.accumulator(0)
+
 def inference(pd_x: pd.Series, pd_m: pd.Series) -> pd.Series:
+    global inference_time
+    inference_start = timeit.default_timer()
+    #import os
+    #os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     # make TF less agressive for GPU Memeory
     gpus = tf.config.experimental.list_physical_devices('GPU')
     if gpus:
@@ -36,14 +43,20 @@ def inference(pd_x: pd.Series, pd_m: pd.Series) -> pd.Series:
     ret = pd.Series([], dtype=np.float32)
     for i in range(pd_x.size):
         ret = ret.append(pd.Series([outputs[i]], dtype=np.float32))
+    inference_time += (timeit.default_timer() - inference_start)
     return ret
 
 
 inference_udf = pandas_udf(inference, ArrayType(FloatType(), True))
 input_df = spark.read.format(data_format).load(data_path)
-df = inference_data_as_pyspark_dataframe(input_df, inference_timestr, timestr_format, inference_udf)
 
+# Warm up
+input_df.show(20, False)
+
+df = inference_data_as_pyspark_dataframe(input_df, inference_timestr, timestr_format, inference_udf)
 df.write.mode("overwrite").parquet(result_path)
+
+print("inference time : " + str(inference_time.value) + "sec")
 
 check = spark.read.parquet(result_path)
 check.show()
