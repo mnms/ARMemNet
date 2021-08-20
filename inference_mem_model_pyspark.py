@@ -8,31 +8,33 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
-model_path = "/workspace/ARMemNet/AR_mem/model_save/20210325-07"
-data_path = "hdfs://192.168.201.250:9000/5min_parquet_inference"
-result_path = "/workspace/ARMemNet/result"
+model_path = "hdfs:///AR_mem/model_save/20210325-07"
+model_directory = "20210325-07"
+data_path = "hdfs:///5min_parquet_final"
+result_path = "/AR_mem/result"
 data_format = "parquet"
 inference_timestr = "20191218220000"
 timestr_format = "%Y%m%d%H%M%S"
 
 spark = SparkSession.builder.appName("ARMEM INFERENCE").getOrCreate()
+spark.sparkContext.addFile(model_path, True)
 
 inference_time = spark.sparkContext.accumulator(0)
 
 def inference(pd_x: pd.Series, pd_m: pd.Series) -> pd.Series:
     global inference_time
     inference_start = timeit.default_timer()
-    #import os
-    #os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    import os
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     # make TF less agressive for GPU Memeory
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if gpus:
-        try:
+    #gpus = tf.config.experimental.list_physical_devices('GPU')
+    #if gpus:
+    #     try:
             # only one gpu visible to TF
-            tf.config.experimental.set_memory_growth(gpus[0], True)
-        except RuntimeError as e:
-            print(e)
-    model = tf.saved_model.load(model_path)
+    #        tf.config.experimental.set_memory_growth(gpus[0], True)
+    #    except RuntimeError as e:
+    #        print(e)
+    model = tf.saved_model.load(model_directory)
     batch_x = np.zeros((pd_x.size, 10, 8), dtype=np.float32)
     batch_m = np.zeros((pd_m.size, 77, 8), dtype=np.float32)
     for i in range(pd_x.size):
@@ -55,7 +57,6 @@ input_df.show(20, False)
 
 df = inference_data_as_pyspark_dataframe(input_df, inference_timestr, timestr_format, inference_udf)
 df.write.mode("overwrite").parquet(result_path)
-
 print("inference time : " + str(inference_time.value) + "sec")
 
 check = spark.read.parquet(result_path)
