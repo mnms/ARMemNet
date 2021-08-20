@@ -120,14 +120,14 @@ def inference_data_as_pyspark_dataframe(
         .groupBy("cell_num").pivot("evt_dtm") \
         .agg(array(first("CQI"), first("RSRP"), first("RSRQ"), first("DL_PRB_USAGE_RATE"), first("SINR"),
                    first("UE_TX_POWER"), first("PHR"), first("UE_CONN_TOT_CNT"))) \
-        .select("cell_num", flatten(array(memory_times)).alias("M"))
+        .select("cell_num", concat(*memory_times).alias("M"))
     input_times = buildInputTimeList(input_datetime, dateformat_str)
     time_filter = "evt_dtm IN ({})".format(listToString(input_times))
     inf_df_x = normalized_df.where(time_filter) \
         .groupBy("cell_num").pivot("evt_dtm") \
         .agg(array(first("CQI"), first("RSRP"), first("RSRQ"), first("DL_PRB_USAGE_RATE"), first("SINR"),
                    first("UE_TX_POWER"), first("PHR"), first("UE_CONN_TOT_CNT"))) \
-        .select("cell_num", flatten(array(input_times)).alias("X"))
+        .select("cell_num", concat(*input_times).alias("X"))
     inf_df = inf_df_memory.join(inf_df_x, on='cell_num', how='left')
     inf_df = inf_df.withColumn("prediction", inference_udf(col("X"), col("M"))).select("cell_num", "prediction")
     for i in range(len(features)):
